@@ -5,14 +5,13 @@
     <title>FixAR 3D - Mittaustyökalu</title>
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <style>
-      /* Yksinkertainen käyttöliittymä, joka kelluu kamerakuvan päällä */
       #ui-container {
         position: absolute;
         bottom: 10%;
         width: 100%;
         text-align: center;
         z-index: 10;
-        pointer-events: none; /* Estää UI:ta blokkaamasta ruudun painalluksia */
+        pointer-events: none;
       }
       #distance-text {
         background-color: rgba(0, 0, 0, 0.7);
@@ -34,39 +33,49 @@
     <script>
       AFRAME.registerComponent('ar-measurement', {
         init: function () {
-          this.points = []; // Tallentaa napautettujen pisteiden koordinaatit
+          this.points = [];
           this.uiText = document.getElementById('distance-text');
           
-          // Kuunnellaan ruudun napautuksia
-          window.addEventListener('click', (e) => {
-            // Haetaan kameran (tai puhelimen) sijainti 3D-tilassa
+          // Luodaan funktio, joka ajetaan kun ruutua napautetaan
+          this.handleTap = () => {
             let camera = document.querySelector('[camera]').object3D;
-            
-            // Luodaan uusi piste hieman kameran eteen (yksinkertaistettu malli)
-            // Oikeassa tuotantoversiossa tähän kytkettäisiin WebXR Hit Test (pintojen tunnistus)
             let position = new THREE.Vector3();
+            
+            // Haetaan suunta johon puhelin katsoo
             camera.getWorldDirection(position);
-            position.multiplyScalar(-1); // Työnnetään pistettä 1 metri eteenpäin
+            
+            // Asetetaan piste 0.5 metrin päähän kamerasta
+            position.multiplyScalar(-0.5); 
             position.add(camera.position);
 
             this.addMarker(position);
+          };
+
+          // 1. Kuunnellaan klikkauksia tietokoneen selaimessa (testausta varten)
+          window.addEventListener('click', this.handleTap);
+          window.addEventListener('touchstart', this.handleTap);
+
+          // 2. TÄRKEIN: Kuunnellaan AR-tilan napautuksia
+          this.el.sceneEl.addEventListener('enter-vr', () => {
+            if (this.el.sceneEl.is('ar-mode')) {
+              // Haetaan aktiivinen AR-sessio ja kuunnellaan 'select' (napautus) tapahtumaa
+              const session = this.el.sceneEl.renderer.xr.getSession();
+              session.addEventListener('select', this.handleTap);
+            }
           });
         },
 
         addMarker: function (position) {
           if (this.points.length >= 2) {
-            // Nollataan, jos 2 pistettä on jo asetettu
             this.points = [];
-            // Poistetaan vanhat pallot ruudulta
             document.querySelectorAll('.marker').forEach(e => e.remove());
             this.uiText.innerText = "Napauta ruutua (1/2 pistettä)";
           }
 
           this.points.push(position);
 
-          // Luodaan punainen pallo napautettuun kohtaan
           let sphere = document.createElement('a-sphere');
-          sphere.setAttribute('radius', '0.02');
+          sphere.setAttribute('radius', '0.015'); // Hieman pienempi pallo
           sphere.setAttribute('color', 'red');
           sphere.setAttribute('position', position);
           sphere.setAttribute('class', 'marker');
@@ -82,18 +91,14 @@
         calculateDistance: function () {
           let p1 = this.points[0];
           let p2 = this.points[1];
-          
-          // Lasketaan etäisyys (etäisyys on metreinä)
           let distance = p1.distanceTo(p2);
-          
-          // Muutetaan millimetreiksi
           let distanceMm = Math.round(distance * 1000);
           this.uiText.innerText = `Etäisyys: ${distanceMm} mm`;
         }
       });
     </script>
 
-    <a-scene webxr="requiredFeatures: hit-test, local-floor" ar-measurement>
+    <a-scene webxr="requiredFeatures: local-floor" ar-measurement>
       <a-camera position="0 1.6 0">
         <a-cursor color="yellow" scale="0.5 0.5 0.5"></a-cursor>
       </a-camera>
